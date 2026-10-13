@@ -1,18 +1,16 @@
 $ErrorActionPreference = 'Stop'
 
-function Write-Banner {
-    Clear-Host
-    Write-Host ''
-    Write-Host '========================================' -ForegroundColor Red
-    Write-Host '           INJECTION FINDER' -ForegroundColor Red
-    Write-Host '             made by 1ect' -ForegroundColor Red
-    Write-Host '========================================' -ForegroundColor Red
-    Write-Host ''
-}
-
-Write-Banner
-Write-Host 'Checks visible native module names and paths for the terms Doomsday and Prestige.'
-Write-Host 'A name match is unverified and does not prove an injection.'
+Clear-Host
+Write-Host ''
+Write-Host '  IIIII  N   N  JJJJJ  EEEEE  CCCCC  TTTTT  IIIII  OOOO  N   N' -ForegroundColor Red
+Write-Host '    I    NN  N    J    E      C        T      I   O    O NN  N' -ForegroundColor Red
+Write-Host '    I    N N N    J    EEEE   C        T      I   O    O N N N' -ForegroundColor Red
+Write-Host '    I    N  NN J  J    E      C        T      I   O    O N  NN' -ForegroundColor Red
+Write-Host '  IIIII  N   N  JJ    EEEEE  CCCCC    T    IIIII  OOOO  N   N' -ForegroundColor Red
+Write-Host '                         F I N D E R' -ForegroundColor Red
+Write-Host ''
+Write-Host 'Minecraft-only snapshot: Java process module names and Minecraft logs.'
+Write-Host 'Any hit is an unverified indicator, not proof of cheating or injection.'
 Write-Host ''
 
 try {
@@ -29,46 +27,101 @@ $minecraftProcesses = @(
     }
 )
 
+if ($minecraftProcesses.Count -eq 0) {
+    Write-Host 'No running Java process with recognizable Minecraft launch arguments was found.' -ForegroundColor Yellow
+    Write-Host 'Open Minecraft and try again. This scan does not search unrelated PC processes or files.'
+    exit 0
+}
+
 $scanTime = Get-Date
-$namePatterns = '(?i)Doomsday|Prestige'
-$matches = @()
-$inspectionErrors = @()
+$modulePattern = '(?i)inject|cheat|hack|agent|doomsday|prestige'
+$logPattern = '(?i)-javaagent|-agentlib|-agentpath|java.?agent|instrumentation.?agent|inject(or|ed|ion)?'
+$findings = @()
+$scanErrors = @()
 
 foreach ($minecraftProcess in $minecraftProcesses) {
-    try {
-        $modules = @(Get-Process -Id $minecraftProcess.ProcessId -ErrorAction Stop |
-            Select-Object -ExpandProperty Modules -ErrorAction Stop |
-            Where-Object {
-                $_.ModuleName -match $namePatterns -or $_.FileName -match $namePatterns
-            })
+    $processId = $minecraftProcess.ProcessId
+    $gameDirectories = @()
 
-        foreach ($module in $modules) {
-            $matches += [PSCustomObject]@{
-                ProcessId = $minecraftProcess.ProcessId
-                ModuleName = $module.ModuleName
-                FileName = $module.FileName
+    if ($minecraftProcess.CommandLine -match '(?i)--gameDir\s+"([^"]+)"') {
+        $gameDirectories += $Matches[1]
+    }
+    elseif ($minecraftProcess.CommandLine -match '(?i)--gameDir\s+(\S+)') {
+        $gameDirectories += $Matches[1]
+    }
+
+    $gameDirectories += (Join-Path $env:APPDATA '.minecraft')
+    $logPaths = @(
+        $gameDirectories |
+            Where-Object { $_ } |
+            ForEach-Object { Join-Path $_ 'logs\latest.log' } |
+            Select-Object -Unique
+    )
+
+    try {
+        $moduleHits = @(
+            Get-Process -Id $processId -ErrorAction Stop |
+                Select-Object -ExpandProperty Modules -ErrorAction Stop |
+                Where-Object {
+                    $_.ModuleName -match $modulePattern -or
+                    [System.IO.Path]::GetFileName($_.FileName) -match $modulePattern
+                }
+        )
+
+        foreach ($module in $moduleHits) {
+            $findings += [PSCustomObject]@{
+                Kind = 'Possible module-name indicator (unverified)'
+                ProcessId = $processId
+                Name = $module.ModuleName
+                Detail = $module.FileName
             }
         }
     }
     catch {
-        $inspectionErrors += "PID $($minecraftProcess.ProcessId): $($_.Exception.Message)"
+        $scanErrors += "Could not inspect modules for PID ${processId}: $($_.Exception.Message)"
+    }
+
+    foreach ($logPath in $logPaths) {
+        if (-not (Test-Path -LiteralPath $logPath -PathType Leaf)) {
+            continue
+        }
+
+        try {
+            $lineNumber = 0
+            foreach ($line in Get-Content -LiteralPath $logPath -ErrorAction Stop) {
+                $lineNumber++
+                if ($line -match $logPattern) {
+                    $findings += [PSCustomObject]@{
+                        Kind = 'Possible log indicator (unverified)'
+                        ProcessId = $processId
+                        Name = $logPath
+                        Detail = "Line ${lineNumber}: $line"
+                    }
+                }
+            }
+        }
+        catch {
+            $scanErrors += "Could not read log ${logPath}: $($_.Exception.Message)"
+        }
     }
 }
 
+Write-Host "Scan observed at: $($scanTime.ToString('yyyy-MM-dd HH:mm:ss zzz'))"
+Write-Host "Minecraft-like Java processes checked: $($minecraftProcesses.Count)"
 Write-Host ''
-if ($matches.Count -gt 0) {
-    Write-Host 'POSSIBLE NAME MATCHES (UNVERIFIED)' -ForegroundColor Yellow
-    Write-Host "Scan observed at: $($scanTime.ToString('yyyy-MM-dd HH:mm:ss zzz'))"
-    foreach ($match in $matches) {
+
+if ($findings.Count -gt 0) {
+    Write-Host 'POSSIBLE INDICATORS - REVIEW THESE MANUALLY' -ForegroundColor Yellow
+    foreach ($finding in $findings) {
         Write-Host ''
-        Write-Host "Process ID: $($match.ProcessId)"
-        Write-Host "Module: $($match.ModuleName)"
-        Write-Host "Path: $($match.FileName)"
+        Write-Host $finding.Kind -ForegroundColor Yellow
+        Write-Host "Process ID: $($finding.ProcessId)"
+        Write-Host "Name/file: $($finding.Name)"
+        Write-Host "Details: $($finding.Detail)"
         Write-Host "Observed by this scan at: $($scanTime.ToString('yyyy-MM-dd HH:mm:ss zzz'))"
     }
 }
 else {
-    Write-Host ''
     Write-Host '##  ##  ##  ##  ##  ##' -ForegroundColor Blue
     Write-Host '### ##  ##  ##  ### ##' -ForegroundColor Blue
     Write-Host '## ###  ##  ##  ## ###' -ForegroundColor Blue
@@ -77,19 +130,15 @@ else {
     Write-Host '          hmmm nothing here....' -ForegroundColor Blue
 }
 
-if ($minecraftProcesses.Count -eq 0) {
-    Write-Host 'No running Java process with recognizable Minecraft launch arguments was found.' -ForegroundColor Yellow
-}
-
-if ($inspectionErrors.Count -gt 0) {
+if ($scanErrors.Count -gt 0) {
     Write-Host ''
-    Write-Host 'Some processes could not be inspected; this scan is incomplete:' -ForegroundColor Red
-    foreach ($inspectionError in $inspectionErrors) {
-        Write-Host "  $inspectionError" -ForegroundColor Red
+    Write-Host 'Some checks could not be completed:' -ForegroundColor Red
+    foreach ($scanError in $scanErrors) {
+        Write-Host "  $scanError" -ForegroundColor Red
     }
-    Write-Host 'Try running PowerShell as the same user that started Minecraft.' -ForegroundColor Yellow
 }
 
 Write-Host ''
-Write-Host "No name match does not prove the game is clean. Renamed or hidden modules, Java-agent mods,"
-Write-Host 'and other injection methods may not appear in this list. The scan cannot determine injection time.' -ForegroundColor Yellow
+Write-Host 'This checks only visible module names and matching text in latest.log files.'
+Write-Host 'Legitimate software may match; renamed/hidden cheats or Java mods may be missed.'
+Write-Host 'Times shown are scan times. Logs may include their own event time, not a verified injection time.' -ForegroundColor Yellow
