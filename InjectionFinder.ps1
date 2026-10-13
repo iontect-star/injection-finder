@@ -34,7 +34,8 @@ if ($minecraftProcesses.Count -eq 0) {
 }
 
 $scanTime = Get-Date
-$modulePattern = '(?i)inject|cheat|hack|agent|doomsday|prestige'
+$modulePattern = '(?i)inject|cheat|hack|agent'
+$launchPattern = '(?i)-javaagent(?:[:=]|\s)|-agentlib(?::|\s)|-agentpath(?::|\s)|-Xbootclasspath'
 $logPattern = '(?i)-javaagent|-agentlib|-agentpath|java.?agent|instrumentation.?agent|inject(or|ed|ion)?'
 $findings = @()
 $scanErrors = @()
@@ -42,6 +43,15 @@ $scanErrors = @()
 foreach ($minecraftProcess in $minecraftProcesses) {
     $processId = $minecraftProcess.ProcessId
     $gameDirectories = @()
+
+    if ($minecraftProcess.CommandLine -match $launchPattern) {
+        $findings += [PSCustomObject]@{
+            Kind = 'Possible Java agent launch option (unverified)'
+            ProcessId = $processId
+            Name = 'Java process command line'
+            Detail = $Matches[0]
+        }
+    }
 
     if ($minecraftProcess.CommandLine -match '(?i)--gameDir\s+"([^"]+)"') {
         $gameDirectories += $Matches[1]
