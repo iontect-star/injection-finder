@@ -7,7 +7,7 @@ Write-Host '    I    NN  N    J    E      C        T      I   O    O NN  N' -For
 Write-Host '    I    N N N    J    EEEE   C        T      I   O    O N N N' -ForegroundColor Red
 Write-Host '    I    N  NN J  J    E      C        T      I   O    O N  NN' -ForegroundColor Red
 Write-Host '  IIIII  N   N  JJ    EEEEE  CCCCC    T    IIIII  OOOO  N   N' -ForegroundColor Red
-Write-Host '                         F I N D E R' -ForegroundColor Red
+Write-Host '                         F I N D E R - by 1ect :D' -ForegroundColor Red
 Write-Host ''
 Write-Host 'Minecraft-only snapshot: Java process module names and Minecraft logs.'
 Write-Host 'Any hit is an unverified indicator, not proof of cheating or injection.'
